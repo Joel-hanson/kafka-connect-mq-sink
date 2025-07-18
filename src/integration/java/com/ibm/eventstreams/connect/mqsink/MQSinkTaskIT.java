@@ -139,7 +139,6 @@ public class MQSinkTaskIT extends AbstractJMSContextIT {
 
         // Check if the config reflects the change
         assertEquals(System.getProperty("com.ibm.mq.cfg.useIBMCipherMappings"), "true");
-        
         // Verify the exception messages
         connectorConfigProps.put("mq.ssl.use.ibm.cipher.mappings", "Not a boolean");
         final ConfigException exc = assertThrows(ConfigException.class, () -> {
