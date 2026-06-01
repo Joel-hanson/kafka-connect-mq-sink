@@ -57,6 +57,7 @@ public abstract class BaseMessageBuilder implements MessageBuilder {
     /**
      * MQMD properties that require Integer type according to IBM MQ JMS specification.
      * See: https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=application-jms-message-object-properties
+     * See: https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=messages-jms-fields-properties-corresponding-mqmd-fields
      */
     private static final Set<String> MQMD_INTEGER_PROPERTIES = new HashSet<>(Arrays.asList(
             "JMS_IBM_MQMD_Report",
@@ -101,15 +102,46 @@ public abstract class BaseMessageBuilder implements MessageBuilder {
     ));
 
     /**
-     * All MQMD properties that require type-aware handling.
+     * JMS_IBM properties (non-MQMD) that require Integer type.
+     * These are standard JMS properties that map to MQMD fields and can be set by applications.
+     * See: https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=messages-jms-fields-properties-corresponding-mqmd-fields
+     *
+     * Note: Many JMS_IBM properties are read-only (set by IBM MQ) and cannot be set by applications.
+     * Only settable properties are included here.
+     * Note: JMS_IBM_MsgId and JMS_IBM_CorrelId are read-only and cannot be set directly.
+     * JMS_IBM_ConnectionId is also read-only.
      */
-    private static final Set<String> ALL_MQMD_PROPERTIES = new HashSet<>();
+    private static final Set<String> JMS_IBM_INTEGER_PROPERTIES = new HashSet<>(Arrays.asList(
+            "JMS_IBM_Report_Exception",
+            "JMS_IBM_Report_Expiration",
+            "JMS_IBM_Report_COA",
+            "JMS_IBM_Report_COD",
+            "JMS_IBM_Report_PAN",
+            "JMS_IBM_Report_NAN",
+            "JMS_IBM_Report_Pass_Msg_ID",
+            "JMS_IBM_Report_Pass_Correl_ID",
+            "JMS_IBM_Report_Discard_Msg",
+            "JMS_IBM_MsgType",
+            "JMS_IBM_Feedback",
+            "JMS_IBM_Encoding",
+            "JMS_IBM_Character_Set",
+            "JMS_IBM_PutApplType"
+    ));
 
-    static {
-        ALL_MQMD_PROPERTIES.addAll(MQMD_INTEGER_PROPERTIES);
-        ALL_MQMD_PROPERTIES.addAll(MQMD_STRING_PROPERTIES);
-        ALL_MQMD_PROPERTIES.addAll(MQMD_BYTES_PROPERTIES);
-    }
+    /**
+     * JMS_IBM properties (non-MQMD) that require String type.
+     * Note: JMS_IBM_PutAppl, JMS_IBM_PutDate, JMS_IBM_PutTime are read-only and cannot be set.
+     */
+    private static final Set<String> JMS_IBM_STRING_PROPERTIES = new HashSet<>(Arrays.asList(
+            "JMS_IBM_Format"
+    ));
+
+    /**
+     * JMS_IBM properties (non-MQMD) that require Boolean type.
+     */
+    private static final Set<String> JMS_IBM_BOOLEAN_PROPERTIES = new HashSet<>(Arrays.asList(
+            "JMS_IBM_Last_Msg_In_Group"
+    ));
 
     /**
      * Configure this class.
@@ -180,19 +212,20 @@ public abstract class BaseMessageBuilder implements MessageBuilder {
     public abstract Message getJMSMessage(JMSContext jmsCtxt, SinkRecord record);
 
     /**
-     * Sets a JMS message property with proper type casting for MQMD properties.
+     * Sets a JMS message property with proper type casting for IBM MQ properties.
      *
-     * MQMD properties require specific types according to IBM MQ JMS specification:
+     * IBM MQ properties require specific types according to IBM MQ JMS specification:
      * See: https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=application-jms-message-object-properties
+     * See: https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=messages-jms-fields-properties-corresponding-mqmd-fields
      *
-     * This method preserves type information for MQMD properties while converting
+     * This method preserves type information for IBM MQ properties while converting
      * all other properties to strings for backward compatibility with existing deployments.
      *
      * @param message            the JMS message to set the property on
      * @param key                the property name
      * @param value              the property value (may be null)
      * @throws JMSException      if the property cannot be set
-     * @throws ConnectException  if the value type is not compatible with the expected MQMD type
+     * @throws ConnectException  if the value type is not compatible with the expected property type
      */
     private void setJmsProperty(final Message message, final String key, final Object value) throws JMSException {
         if (value == null) {
@@ -201,9 +234,9 @@ public abstract class BaseMessageBuilder implements MessageBuilder {
             return;
         }
 
-        // Check if this is an MQMD property that requires type-aware handling
-        if (MQMD_INTEGER_PROPERTIES.contains(key)) {
-            // Handle Integer MQMD properties
+        // Check if this is an IBM MQ property that requires type-aware handling
+        if (MQMD_INTEGER_PROPERTIES.contains(key) || JMS_IBM_INTEGER_PROPERTIES.contains(key)) {
+            // Handle Integer properties (both MQMD and JMS_IBM)
             if (value instanceof Integer) {
                 message.setIntProperty(key, (Integer) value);
             } else if (value instanceof Number) {
@@ -212,34 +245,49 @@ public abstract class BaseMessageBuilder implements MessageBuilder {
             } else if (value instanceof String) {
                 try {
                     message.setIntProperty(key, Integer.parseInt((String) value));
-                } catch (NumberFormatException e) {
-                    log.warn("Cannot convert string value '{}' to integer for MQMD property '{}'", value, key);
-                    throw new ConnectException("Failed to set MQMD property '" + key +
+                } catch (final NumberFormatException e) {
+                    log.warn("Cannot convert string value '{}' to integer for property '{}'", value, key);
+                    throw new ConnectException("Failed to set property '" + key +
                             "': expected integer but got '" + value + "'", e);
                 }
             } else {
-                log.warn("Cannot convert type {} to integer for MQMD property '{}'",
+                log.warn("Cannot convert type {} to integer for property '{}'",
                         value.getClass().getName(), key);
-                throw new ConnectException("Failed to set MQMD property '" + key +
+                throw new ConnectException("Failed to set property '" + key +
                         "': unsupported type " + value.getClass().getName());
             }
-        } else if (MQMD_STRING_PROPERTIES.contains(key)) {
-            // Handle String MQMD properties
+        } else if (MQMD_STRING_PROPERTIES.contains(key) || JMS_IBM_STRING_PROPERTIES.contains(key)) {
+            // Handle String properties (both MQMD and JMS_IBM)
             message.setStringProperty(key, value.toString());
         } else if (MQMD_BYTES_PROPERTIES.contains(key)) {
-            // Handle byte[] MQMD properties
+            // Handle byte[] properties (both MQMD and JMS_IBM)
             if (value instanceof byte[]) {
                 message.setObjectProperty(key, value);
             } else {
-                log.warn("Cannot convert type {} to byte array for MQMD property '{}'",
+                log.warn("Cannot convert type {} to byte array for property '{}'",
                         value.getClass().getName(), key);
-                throw new ConnectException("Failed to set MQMD property '" + key +
+                throw new ConnectException("Failed to set property '" + key +
                         "': expected byte array but got " + value.getClass().getName());
             }
+        } else if (JMS_IBM_BOOLEAN_PROPERTIES.contains(key)) {
+            // Handle Boolean properties (JMS_IBM only)
+            if (value instanceof Boolean) {
+                message.setBooleanProperty(key, (Boolean) value);
+            } else if (value instanceof Integer) {
+                // Allow conversion from Integer (0/1) to Boolean
+                message.setBooleanProperty(key, ((Integer) value) != 0);
+            } else if (value instanceof String) {
+                message.setBooleanProperty(key, Boolean.parseBoolean((String) value));
+            } else {
+                log.warn("Cannot convert type {} to boolean for property '{}'",
+                        value.getClass().getName(), key);
+                throw new ConnectException("Failed to set property '" + key +
+                        "': unsupported type " + value.getClass().getName());
+            }
         } else {
-            // For non-MQMD properties, convert everything to string for backward compatibility
+            // For non-IBM MQ properties, convert everything to string for backward compatibility
             message.setStringProperty(key, value.toString());
-            log.debug("Set property '{}' as string (non-MQMD): {}", key, value);
+            log.debug("Set property '{}' as string (non-IBM MQ): {}", key, value);
         }
     }
 
