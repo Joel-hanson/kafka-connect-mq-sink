@@ -16,6 +16,8 @@
 package com.ibm.eventstreams.connect.mqsink.processor;
 
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -154,6 +156,38 @@ public class KafkaToJmsHeaderConverterTest {
         converter.copyHeaderToJmsProperty(message, header);
 
         verify(message).setObjectProperty(JmsConstants.JMS_IBM_LAST_MSG_IN_GROUP, true);
+    }
+
+    @Test
+    public void coercesIbmBooleanHeaderFromStringOne() throws Exception {
+        final Header header = new ConnectHeaders().addString(JmsConstants.JMS_IBM_LAST_MSG_IN_GROUP, "1")
+                .lastWithName(JmsConstants.JMS_IBM_LAST_MSG_IN_GROUP);
+
+        converter.copyHeaderToJmsProperty(message, header);
+
+        verify(message).setObjectProperty(JmsConstants.JMS_IBM_LAST_MSG_IN_GROUP, true);
+    }
+
+    @Test
+    public void coercesIbmBooleanHeaderFromStringZero() throws Exception {
+        final Header header = new ConnectHeaders().addString(JmsConstants.JMS_IBM_LAST_MSG_IN_GROUP, "0")
+                .lastWithName(JmsConstants.JMS_IBM_LAST_MSG_IN_GROUP);
+
+        converter.copyHeaderToJmsProperty(message, header);
+
+        verify(message).setObjectProperty(JmsConstants.JMS_IBM_LAST_MSG_IN_GROUP, false);
+    }
+
+    @Test
+    public void integerParseFailureIncludesCause() {
+        final Header header = new ConnectHeaders().addString(JmsConstants.JMS_IBM_MQMD_PRIORITY, "abc")
+                .lastWithName(JmsConstants.JMS_IBM_MQMD_PRIORITY);
+
+        final ConnectException exception = assertThrows(ConnectException.class,
+                () -> converter.copyHeaderToJmsProperty(message, header));
+
+        assertNotNull(exception.getCause());
+        assertEquals(NumberFormatException.class, exception.getCause().getClass());
     }
 
     @Test

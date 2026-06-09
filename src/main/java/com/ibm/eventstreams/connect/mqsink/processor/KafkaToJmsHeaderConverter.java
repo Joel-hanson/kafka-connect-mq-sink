@@ -162,7 +162,8 @@ public class KafkaToJmsHeaderConverter {
             try {
                 return Integer.valueOf((String) value);
             } catch (final NumberFormatException e) {
-                throw new ConnectException("Header '" + key + "' requires an integer value but got '" + value + "'");
+                throw new ConnectException(
+                        "Header '" + key + "' requires an integer value but got '" + value + "'", e);
             }
         }
         throw new ConnectException("Header '" + key + "' requires an integer-compatible value but got "
@@ -177,7 +178,17 @@ public class KafkaToJmsHeaderConverter {
             return Boolean.valueOf(((Integer) value) != 0);
         }
         if (value instanceof String) {
-            return Boolean.valueOf(Boolean.parseBoolean((String) value));
+            final String strValue = ((String) value).trim();
+            if ("1".equals(strValue)) {
+                return Boolean.TRUE;
+            }
+            if ("0".equals(strValue)) {
+                return Boolean.FALSE;
+            }
+            if ("true".equalsIgnoreCase(strValue) || "false".equalsIgnoreCase(strValue)) {
+                return Boolean.valueOf(Boolean.parseBoolean(strValue));
+            }
+            throw new ConnectException("Header '" + key + "' requires a boolean value but got '" + value + "'");
         }
         throw new ConnectException("Header '" + key + "' requires a boolean-compatible value but got "
                 + value.getClass().getName());
