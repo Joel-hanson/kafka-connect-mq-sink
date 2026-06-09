@@ -16,16 +16,13 @@
 package com.ibm.eventstreams.connect.mqsink.builders;
 
 import com.ibm.eventstreams.connect.mqsink.MQSinkConfig;
+import com.ibm.eventstreams.connect.mqsink.processor.KafkaToJmsHeaderConverter;
 
 import com.ibm.mq.jms.MQQueue;
-import com.ibm.msg.client.jms.JmsConstants;
 
 import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Set;
 
 import javax.jms.Destination;
 import javax.jms.JMSContext;
@@ -55,109 +52,7 @@ public abstract class BaseMessageBuilder implements MessageBuilder {
     public String offsetPropertyName;
     public boolean copyJmsProperties;
 
-    /**
-     * MQMD properties that require Integer type according to IBM MQ JMS specification.
-     *
-     * IMPORTANT NOTES about JMS Specification Compliance:
-     * - JMS_IBM_MQMD_Priority: Values outside 0-9 range violate JMS specification
-     * - These properties are IBM MQ extensions and may not be fully JMS-compliant
-     * - The connector passes values through; IBM MQ will validate/reject invalid values
-     *
-     * See: https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=application-jms-message-object-properties
-     * See: https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=messages-jms-fields-properties-corresponding-mqmd-fields
-     */
-    private static final Set<String> MQMD_INTEGER_PROPERTIES = new HashSet<>(Arrays.asList(
-            JmsConstants.JMS_IBM_MQMD_REPORT,
-            JmsConstants.JMS_IBM_MQMD_MSGTYPE,
-            JmsConstants.JMS_IBM_MQMD_EXPIRY,
-            JmsConstants.JMS_IBM_MQMD_FEEDBACK,
-            JmsConstants.JMS_IBM_MQMD_ENCODING,
-            JmsConstants.JMS_IBM_MQMD_CODEDCHARSETID,
-            JmsConstants.JMS_IBM_MQMD_PRIORITY,
-            JmsConstants.JMS_IBM_MQMD_PERSISTENCE,
-            JmsConstants.JMS_IBM_MQMD_BACKOUTCOUNT,
-            JmsConstants.JMS_IBM_MQMD_PUTAPPLTYPE,
-            JmsConstants.JMS_IBM_MQMD_MSGSEQNUMBER,
-            JmsConstants.JMS_IBM_MQMD_OFFSET,
-            JmsConstants.JMS_IBM_MQMD_MSGFLAGS,
-            JmsConstants.JMS_IBM_MQMD_ORIGINALLENGTH
-    ));
-
-    /**
-     * MQMD properties that require String type according to IBM MQ JMS specification.
-     */
-    private static final Set<String> MQMD_STRING_PROPERTIES = new HashSet<>(Arrays.asList(
-            JmsConstants.JMS_IBM_MQMD_FORMAT,
-            JmsConstants.JMS_IBM_MQMD_REPLYTOQ,
-            JmsConstants.JMS_IBM_MQMD_REPLYTOQMGR,
-            JmsConstants.JMS_IBM_MQMD_USERIDENTIFIER,
-            JmsConstants.JMS_IBM_MQMD_APPLIDENTITYDATA,
-            JmsConstants.JMS_IBM_MQMD_PUTAPPLNAME,
-            JmsConstants.JMS_IBM_MQMD_PUTDATE,
-            JmsConstants.JMS_IBM_MQMD_PUTTIME,
-            JmsConstants.JMS_IBM_MQMD_APPLORIGINDATA
-    ));
-
-    /**
-     * MQMD byte array properties that should be skipped when setting JMS properties.
-     *
-     * NOTE: According to IBM MQ documentation, "The use of byte array properties on a message
-     * violates the JMS specification." These properties should be set through the MQMD API
-     * (MessageDescriptor) rather than as JMS properties.
-     *
-     * These properties are explicitly skipped to avoid JMS spec violations. Use MessageDescriptorBuilder
-     * with mq.message.mqmd.write=true and mq.message.mqmd.context=ALL to set these fields properly.
-     *
-     * See: https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=application-jms-message-object-properties
-     */
-    private static final Set<String> MQMD_BYTES_PROPERTIES_TO_SKIP = new HashSet<>(Arrays.asList(
-            JmsConstants.JMS_IBM_MQMD_MSGID,
-            JmsConstants.JMS_IBM_MQMD_CORRELID,
-            JmsConstants.JMS_IBM_MQMD_ACCOUNTINGTOKEN,
-            JmsConstants.JMS_IBM_MQMD_GROUPID
-    ));
-
-    /**
-     * JMS_IBM properties (non-MQMD) that require Integer type.
-     * These are standard JMS properties that map to MQMD fields and can be set by applications.
-     * See: https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=messages-jms-fields-properties-corresponding-mqmd-fields
-     *
-     * Note: Many JMS_IBM properties are read-only (set by IBM MQ) and cannot be set by applications.
-     * Only settable properties are included here.
-     * Note: JMS_IBM_MsgId and JMS_IBM_CorrelId are read-only and cannot be set directly.
-     * JMS_IBM_ConnectionId is also read-only.
-     */
-    private static final Set<String> JMS_IBM_INTEGER_PROPERTIES = new HashSet<>(Arrays.asList(
-            JmsConstants.JMS_IBM_REPORT_EXCEPTION,
-            JmsConstants.JMS_IBM_REPORT_EXPIRATION,
-            JmsConstants.JMS_IBM_REPORT_COA,
-            JmsConstants.JMS_IBM_REPORT_COD,
-            JmsConstants.JMS_IBM_REPORT_PAN,
-            JmsConstants.JMS_IBM_REPORT_NAN,
-            JmsConstants.JMS_IBM_REPORT_PASS_MSG_ID,
-            JmsConstants.JMS_IBM_REPORT_PASS_CORREL_ID,
-            JmsConstants.JMS_IBM_REPORT_DISCARD_MSG,
-            JmsConstants.JMS_IBM_MSGTYPE,
-            JmsConstants.JMS_IBM_FEEDBACK,
-            JmsConstants.JMS_IBM_ENCODING,
-            JmsConstants.JMS_IBM_PUTAPPLTYPE
-    ));
-
-    /**
-     * JMS_IBM properties (non-MQMD) that require String type.
-     * Note: JMS_IBM_PutAppl, JMS_IBM_PutDate, JMS_IBM_PutTime are read-only and cannot be set.
-     */
-    private static final Set<String> JMS_IBM_STRING_PROPERTIES = new HashSet<>(Arrays.asList(
-            JmsConstants.JMS_IBM_FORMAT,
-            JmsConstants.JMS_IBM_CHARACTER_SET
-    ));
-
-    /**
-     * JMS_IBM properties (non-MQMD) that require Boolean type.
-     */
-    private static final Set<String> JMS_IBM_BOOLEAN_PROPERTIES = new HashSet<>(Arrays.asList(
-            JmsConstants.JMS_IBM_LAST_MSG_IN_GROUP
-    ));
+    private final KafkaToJmsHeaderConverter kafkaToJmsHeaderConverter = new KafkaToJmsHeaderConverter();
 
     /**
      * Configure this class.
@@ -226,66 +121,6 @@ public abstract class BaseMessageBuilder implements MessageBuilder {
      * @return the JMS message
      */
     public abstract Message getJMSMessage(JMSContext jmsCtxt, SinkRecord record);
-
-    /**
-     * Sets a JMS message property with IBM MQ-aware type handling.
-     *
-     * IBM MQ properties require specific types according to IBM MQ JMS specification:
-     * See: https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=application-jms-message-object-properties
-     * See: https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=messages-jms-fields-properties-corresponding-mqmd-fields
-     * 
-     * This method preserves type information for IBM MQ properties while converting
-     * all other properties to strings for backward compatibility with existing deployments
-     * 
-     * IBM MQ-specific properties, this method uses {@code setObjectProperty()} and
-     * performs only the coercions that IBM MQ JMS does not handle automatically:
-     *
-     * @param message            the JMS message to set the property on
-     * @param key                the property name
-     * @param value              the property value (may be null)
-     * @throws JMSException      if the property cannot be set
-     * @throws ConnectException  if the value type is not compatible with the expected property type
-     */
-    private void setJmsProperty(final Message message, final String key, final Object value) throws JMSException {
-        if (value == null) {
-            // Skip null values as JMS properties cannot be null
-            log.debug("Skipping null value for property '{}'", key);
-            return;
-        }
-
-        if (MQMD_BYTES_PROPERTIES_TO_SKIP.contains(key)) {
-            // Skip byte[] MQMD properties - these violate JMS specification
-            // See: https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=application-jms-message-object-properties
-            // "The use of byte array properties on a message violates the JMS specification"
-            // Use MQMD API (MessageDescriptor) to set these fields instead
-            log.debug("Skipping byte array MQMD property '{}' - use MQMD API instead", key);
-            return;
-        }
-
-        final boolean isIntegerProperty = MQMD_INTEGER_PROPERTIES.contains(key) || JMS_IBM_INTEGER_PROPERTIES.contains(key);
-        final boolean isStringProperty = MQMD_STRING_PROPERTIES.contains(key) || JMS_IBM_STRING_PROPERTIES.contains(key);
-        final boolean isBooleanProperty = JMS_IBM_BOOLEAN_PROPERTIES.contains(key);
-
-        // Apply IBM MQ-specific type handling where the JMS client enforces property types.
-        if (isIntegerProperty || isStringProperty || isBooleanProperty) {
-            Object propertyValue = value;
-
-            // IBM MQ JMS does not accept non-Integer Number types directly for integer-classified properties.
-            if (isIntegerProperty && value instanceof Number && !(value instanceof Integer)) {
-                propertyValue = Integer.valueOf(((Number) value).intValue());
-            // IBM MQ JMS does not accept Integer 0/1 directly for boolean-classified properties.
-            } else if (isBooleanProperty && value instanceof Integer) {
-                propertyValue = Boolean.valueOf(((Integer) value) != 0);
-            }
-
-            message.setObjectProperty(key, propertyValue);
-            return;
-        }
-
-        // For non-IBM MQ properties, convert everything to string for backward compatibility
-        message.setStringProperty(key, value.toString());
-        log.debug("Set property '{}' as string (non-IBM MQ): {}", key, value);
-    }
 
     /**
      * Convert a Kafka Connect SinkRecord into a JMS message.
@@ -384,7 +219,7 @@ public abstract class BaseMessageBuilder implements MessageBuilder {
             for (Iterator<Header> iterator = record.headers().iterator(); iterator.hasNext();) {
                 final Header header = iterator.next();
                 try {
-                    setJmsProperty(m, header.key(), header.value());
+                    kafkaToJmsHeaderConverter.copyHeaderToJmsProperty(m, header);
                 } catch (final JMSException jmse) {
                     throw new ConnectException("Failed to set header '" + header.key() + "'", jmse);
                 }

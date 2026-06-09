@@ -515,9 +515,10 @@ public class DefaultMessageBuilderWithHeadersIT extends AbstractJMSContextIT {
         // JMS_IBM Boolean properties
         headers.addBoolean("JMS_IBM_Last_Msg_In_Group", true);
 
-        // Regular properties (should be converted to strings)
+        // Regular properties: string headers stay strings; typed headers preserve JMS types
         headers.addString("CustomStringProp", "custom_value");
         headers.addInt("CustomIntProp", 999);
+        headers.addString("LegacyIntProp", "42");
 
         // generate MQ message
         final Message message = builder.fromSinkRecord(getJmsContext(), generateSinkRecord(headers));
@@ -536,8 +537,9 @@ public class DefaultMessageBuilderWithHeadersIT extends AbstractJMSContextIT {
         assertEquals("MQSTR", message.getStringProperty("JMS_IBM_Format"));
         assertEquals(true, message.getBooleanProperty("JMS_IBM_Last_Msg_In_Group"));
 
-        // Verify regular properties (converted to strings)
+        // Verify regular properties
         assertEquals("custom_value", message.getStringProperty("CustomStringProp"));
-        assertEquals("999", message.getStringProperty("CustomIntProp"));
+        assertEquals(999, message.getIntProperty("CustomIntProp"));
+        assertEquals("42", message.getStringProperty("LegacyIntProp"));
     }
 }
